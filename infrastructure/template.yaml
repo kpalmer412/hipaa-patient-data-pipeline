@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HIPAA-Compliant Patient Data Ingestion Pipeline
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.9
+    Environment:
+      Variables:
+        BUCKET_NAME: !Ref PatientDataBucket
+        QUARANTINE_QUEUE_URL: !Ref QuarantineQueue
+
+Resources:
+  # S3 Bucket for patient data
+  PatientDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'hipaa-patient-data-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 30
+
+  # SQS Queue for quarantined/invalid data
+  QuarantineQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: patient-data-quarantine-queue
+      MessageRetentionPeriod: 1209600  # 14 days
+      VisibilityTimeout: 300
+
+  # Lambda function for data ingestion
+  IngestionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: patient-data-ingestion
+      CodeUri: ../src/ingestion/
+      Handler: handler.lambda_handler
+      Description: Ingests and validates patient data from API Gateway
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref PatientDataBucket
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt QuarantineQueue.QueueName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:GenerateDataKey
+              Resource: '*'
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /ingest
+            Method: POST
+            RestApiId: !Ref PatientDataApi
+
+  # API Gateway
+  PatientDataApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: patient-data-ingestion-api
+      StageName: dev
+      Cors:
+        AllowMethods: "'POST, OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+        AllowOrigin: "'*'"
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${PatientDataApi}.execute-api.${AWS::Region}.amazonaws.com/dev/ingest'
+  
+  BucketName:
+    Description: S3 bucket for patient data
+    Value: !Ref PatientDataBucket
+  
+  QuarantineQueueUrl:
+    Description: SQS queue URL for quarantined data
+    Value: !Ref QuarantineQueue

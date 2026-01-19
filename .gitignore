@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+
+# AWS SAM
+.aws-sam/
+samconfig.toml
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Test data
+test-data/
