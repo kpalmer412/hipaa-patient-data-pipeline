@@ -63,5 +63,6 @@ hipaa-pipeline/
 
 ## Author
 
-Ken Palmer - AWS Solutions Architect Associate Candidate  
+Ken Palmer - AWS Solutions Architect Certified , HCLS Cloud Engineer 
+
 Healthcare Technology Professional | AWS Cloud Institute Graduate
